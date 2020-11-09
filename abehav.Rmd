@@ -1,0 +1,138 @@
+---
+title: "Animal Behavior Data Analysis for Results"
+author: "Ethan Wang, Zaina Bathily, Pooja Patel, and Karen Zhao"
+date: "11/8/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Tables and Summary Statistics
+
+```{R}
+library(tidyverse)
+animalbehavior <- read.csv("/stor/home/ebw563/animalbehavior.csv")
+
+#Removing samples not meeting minimum visible penguins requirement
+data <- animalbehavior %>% filter(Visible >= 5)
+
+#of samples in total, control group, and experimental group
+data %>% count()
+data %>% group_by(Control) %>% count()
+
+#Mean values were used as opposted to medians since medians were almost always 1 or 0 
+#Mean head-shakes in total and in each category 
+data %>% summarize_at(2:8, list(mean = mean))
+#Mean head-shakes in total and in each category separated by control and experimental groups
+data %>% group_by(Control) %>% summarize_at(1:7, list(mean = mean))
+
+#Total head-shakes in all categories and in each category 
+data %>% summarize_at(2:8, list(sum = sum))
+#Total head-shakes in all categories and in each category separated by control and experimental groups
+data %>% group_by(Control) %>% summarize_at(1:7, list(sum = sum))
+```
+
+## Graphs
+
+```{R}
+#Pivoting longer + misc. functions to make bar plots easier
+data2 <- data%>% pivot_longer(2:8)
+data3 <- data2 %>% filter(name != "Total")
+data4 <- data3 %>% filter(Control =="1")
+data5 <- data3 %>% filter(Control =="0")
+data6 <- data2 %>% filter(name == "Total")
+data6$Control <- factor(data6$Control, levels = c(1,0))
+
+ggplot(data3, aes(x=name, y=value)) + 
+  geom_bar(stat = "summary") + 
+  scale_x_discrete(labels = c("0-10s", "10-20s", "20-30s", "30-40s", "40-50s", "50-60s")) + 
+  ggtitle("Mean Penguin Headshakes by Observation Window - Total") + xlab("Observation Window") + 
+  ylab("Mean Headshakes") + coord_cartesian(ylim=c(0,1.2)) +
+  stat_summary(geom = "errorbar", fun.data = mean_se, position = "dodge")
+
+
+ggplot(data4, aes(x=name, y=value)) + 
+  geom_bar(stat = "summary") + 
+  scale_x_discrete(labels = c("0-10s", "10-20s", "20-30s", "30-40s", "40-50s", "50-60s")) + 
+  ggtitle("Mean Penguin Headshakes by Observation Window - Control") + xlab("Observation Window") + 
+  ylab("Mean Headshakes") + scale_y_continuous(breaks = seq(0, 1, 0.25)) + coord_cartesian(ylim=c(0,1.2)) +
+  stat_summary(geom = "errorbar", fun.data = mean_se, position = "dodge")
+
+
+ggplot(data5, aes(x=name, y=value)) + 
+  geom_bar(stat = "summary") + 
+  scale_x_discrete(labels = c("0-10s", "10-20s", "20-30s", "30-40s", "40-50s", "50-60s")) + 
+  ggtitle("Mean Penguin Headshakes by Observation Window - Experimental") + xlab("Observation Window") + 
+  ylab("Mean Headshakes") + coord_cartesian(ylim=c(0,1.2)) +
+  stat_summary(geom = "errorbar", fun.data = mean_se, position = "dodge")
+
+
+ggplot(data6, aes(x=Control, y=value)) +
+  geom_bar(stat = "summary") + ggtitle("Mean Total Headshakes") + 
+  scale_x_discrete(labels = c("Control", "Experimental")) + 
+  ylab("Mean Headshakes") +
+  stat_summary(geom = "errorbar", fun.data = mean_se, position = "dodge") + xlab("Group")
+```
+
+## Statistical Tests
+
+# Assumptions
+```{R}
+#data 4 is control, data 5 is experimental
+ggplot(data4, aes(value)) +
+    geom_histogram(alpha=0.9, binwidth = 1) +
+    xlab("Number of Headshakes") + ylab ("Frequency") +facet_wrap(~name) + ggtitle("Control Headshake # Distribution by Observation Window")
+
+ggplot(data5, aes(value)) +
+    geom_histogram(alpha=0.9, binwidth = 1) +
+    xlab("Number of Headshakes") + ylab ("Frequency") + facet_wrap(~name) + ggtitle("Experimental Headshake # Distribution by Observation Window")
+
+#Normality of T-test
+ggplot(data, aes(Total)) + geom_histogram(alpha=0.9, binwidth = 1) + facet_wrap(~Control) +
+  xlab("Total # of Headshakes") + ylab("Frequency") + ggtitle("Distribution of Total Headshakes for Experimental (0) and Control (1) Groups")
+```
+
+# The Tests Themselves
+```{R}
+#Mann Whitney Test - significant difference
+wilcox.test(data$Total~data$Control)
+
+require(car)
+require(foreign)
+
+#data 7 is control, data 4
+model <- lm(value ~ name, data = data4)
+analysis <- Anova(model, idata = data4, idesign = ~name)
+analysis
+
+#Experimental group!
+model2 <- lm(value ~ name, data = data5)
+analysis2 <- Anova(model2, idata = data5, idesign = ~name)
+analysis2
+```
+
+```{R}
+#Friedman test (Control)
+Period1 <- data4$value[data4$name=="Period1"]
+Period2 <- data4$value[data4$name=="Period2"]
+Period3 <- data4$value[data4$name=="Period3"]
+Period4 <- data4$value[data4$name=="Period4"]
+Period5 <- data4$value[data4$name=="Period5"]
+Period6 <- data4$value[data4$name=="Period6"]
+CSample <- matrix(c(Period1,Period2,Period3,Period4,Period5,Period6),ncol=6)
+friedman.test(CSample)
+
+#Friedman test (Experimental)
+Period1_ <- data5$value[data4$name=="Period1"]
+Period2_ <- data5$value[data4$name=="Period2"]
+Period3_ <- data5$value[data4$name=="Period3"]
+Period4_ <- data5$value[data4$name=="Period4"]
+Period5_ <- data5$value[data4$name=="Period5"]
+Period6_ <- data5$value[data4$name=="Period6"]
+ESample <- matrix(c(Period1_,Period2_,Period3_,Period4_,Period5_,Period6_),ncol=6)
+friedman.test(ESample)
+
+pairwise.wilcox.test(data5$value, data5$name, p.adjust.method = "bonferroni", paired = T)
+```
